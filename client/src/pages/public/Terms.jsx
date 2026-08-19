@@ -1,0 +1,9 @@
+export default function Terms() {
+  return (
+    <div className="p-10">
+      <h1 className="text-5xl font-bold">
+        Terms & Conditions 📜
+      </h1>
+    </div>
+  );
+}
