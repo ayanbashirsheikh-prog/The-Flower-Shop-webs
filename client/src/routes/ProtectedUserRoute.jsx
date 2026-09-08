@@ -1,21 +1,23 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 
-export default function ProtectedRoute() {
+export default function ProtectedUserRoute() {
   const location = useLocation();
 
-  const { isAuthenticated } = useSelector(
-    (state) => state.auth
+  const user = useSelector(
+    (state) => state.auth?.user
   );
 
-  if (!isAuthenticated) {
+  const token = useSelector(
+    (state) => state.auth?.token
+  );
+
+  if (!user || !token) {
     return (
       <Navigate
         to="/login"
         replace
-        state={{
-          from: location,
-        }}
+        state={{ from: location }}
       />
     );
   }

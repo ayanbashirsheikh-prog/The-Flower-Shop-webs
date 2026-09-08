@@ -4,7 +4,8 @@ import {
   Eye,
   Check,
   Truck,
-  Star,
+  PackageCheck,
+  Sparkles,
 } from "lucide-react";
 
 import { Link } from "react-router-dom";
@@ -19,45 +20,28 @@ import {
 import { addToCart } from "@/redux/slices/cartSlice";
 
 /* =========================================================
-   HELPERS
-========================================================= */
+   PRODUCT CARD
+   Premium Flower Shop Product Card
 
-const formatWeight = (weightKg) => {
-  const value = Number(weightKg || 0);
+   Supports:
+   - API products
+   - Local products
+   - Product variants
+   - 250g / 500g / 1KG
+   - Wishlist
+   - Cart
+   - Best Seller
+   - Wholesale
+   - New Arrival
+   - Stock status
+   ========================================================= */
 
-  if (value === 0.25) return "250 g";
-  if (value === 0.5) return "500 g";
-  if (value === 0.75) return "750 g";
-  if (value === 1) return "1 KG";
-
-  if (value < 1) {
-    return `${Math.round(value * 1000)} g`;
-  }
-
-  return `${value} KG`;
-};
-
-const formatPrice = (price) => {
-  return Number(price || 0).toLocaleString(
-    "en-IN",
-    {
-      maximumFractionDigits: 2,
-    }
-  );
-};
-
-/* =========================================================
-   COMPONENT
-========================================================= */
-
-export default function ProductCard({
-  product,
-}) {
+export default function ProductCard({ product }) {
   const dispatch = useDispatch();
 
   /* =======================================================
      PRODUCT ID
-  ======================================================= */
+     ======================================================= */
 
   const productId = String(
     product?.id ??
@@ -67,176 +51,245 @@ export default function ProductCard({
 
   /* =======================================================
      WISHLIST
-  ======================================================= */
+     ======================================================= */
 
-  const isWishlisted = useSelector(
-    (state) =>
-      selectIsInWishlist(
-        state,
-        productId
-      )
+  const isWishlisted = useSelector((state) =>
+    selectIsInWishlist(
+      state,
+      productId
+    )
   );
 
   /* =======================================================
-     VARIANTS
-     
-     Backend structure:
-     
-     variants: [
-       {
-         weightKg: 0.25,
-         label: "250 g",
-         price: 199,
-         compareAtPrice: 249,
-         discountPercentage: 20,
-         isActive: true
-       }
-     ]
-  ======================================================= */
-
-  const variants = Array.isArray(
-    product?.variants
-  )
-    ? product.variants
-        .filter(
-          (variant) =>
-            variant &&
-            variant.isActive !== false
-        )
-        .sort(
-          (a, b) =>
-            Number(a.weightKg || 0) -
-            Number(b.weightKg || 0)
-        )
-    : [];
-
-  /* =======================================================
-     FALLBACK FOR OLD PRODUCTS
-  ======================================================= */
-
-  const legacyPrice = Number(
-    product?.pricePerKg ??
-      product?.price ??
-      0
-  );
-
-  const firstVariant =
-    variants[0] || null;
-
-  /* =======================================================
-     STARTING PRICE
-     
-     Variant price is already the actual
-     pack selling price.
-  ======================================================= */
-
-  const startingPrice =
-    firstVariant
-      ? Number(
-          firstVariant.price || 0
-        )
-      : legacyPrice *
-        Number(
-          product?.minOrderKg ??
-            0.25
-        );
-
-  const startingWeight =
-    firstVariant
-      ? Number(
-          firstVariant.weightKg || 0
-        )
-      : Number(
-          product?.minOrderKg ??
-            0.25
-        );
-
-  const compareAtPrice =
-    firstVariant
-      ? Number(
-          firstVariant.compareAtPrice ||
-            0
-        )
-      : 0;
-
-  const discountPercentage =
-    firstVariant
-      ? Number(
-          firstVariant.discountPercentage ||
-            0
-        )
-      : 0;
-
-  /* =======================================================
-     STOCK
-  ======================================================= */
-
-  const stockKg = Number(
-    product?.stockKg ?? 0
-  );
-
-  const isOutOfStock =
-    stockKg <= 0;
-
-  const lowStockThreshold =
-    Number(
-      product?.lowStockThresholdKg ??
-        5
-    );
-
-  const isLowStock =
-    !isOutOfStock &&
-    stockKg <=
-      lowStockThreshold;
-
-  /* =======================================================
-     RATING
-  ======================================================= */
-
-  const rating = Number(
-    product?.rating ?? 0
-  );
-
-  const reviewCount = Number(
-    product?.numReviews ??
-      product?.reviewCount ??
-      0
-  );
-
-  /* =======================================================
-     FLAGS
-  ======================================================= */
+     PRODUCT FLAGS
+     ======================================================= */
 
   const isBestSeller =
     product?.bestseller === true ||
     product?.isBestSeller === true;
 
-  const isNew =
-    product?.newArrival === true;
-
   const isWholesale =
     product?.wholesale === true ||
     product?.isWholesale === true;
 
-  const sameDayDelivery =
-    product?.sameDayDelivery === true;
+  const isNewArrival =
+    product?.newArrival === true;
 
   /* =======================================================
-     IMAGE
-  ======================================================= */
+     VARIANTS
+     
+     New backend structure:
+     
+     variants: [
+       {
+         weightKg: 0.25,
+         label: "250 g",
+         price: 299,
+         compareAtPrice: 399,
+         discountPercentage: 25,
+         isActive: true
+       }
+     ]
+     ======================================================= */
 
-  const image =
-    product?.image ||
-    product?.images?.[0]?.url ||
-    "/placeholder-flower.jpg";
+  const activeVariants = Array.isArray(
+    product?.variants
+  )
+    ? product.variants.filter(
+        (variant) =>
+          variant &&
+          variant.isActive !== false
+      )
+    : [];
+
+  /* =======================================================
+     SELECT STARTING VARIANT
+     
+     Prefer:
+     250g
+     then 500g
+     then 1KG
+     then first available variant
+     ======================================================= */
+
+  const startingVariant =
+    activeVariants.length > 0
+      ? [...activeVariants].sort(
+          (a, b) =>
+            Number(a?.weightKg ?? 0) -
+            Number(b?.weightKg ?? 0)
+        )[0]
+      : null;
+
+  /* =======================================================
+     PRICE
+     
+     New backend:
+     variant.price
+
+     Old/local fallback:
+     pricePerKg / price
+     ======================================================= */
+
+  const pricePerKg = Number(
+    product?.pricePerKg ??
+      product?.price ??
+      0
+  );
+
+  const variantPrice = Number(
+    startingVariant?.price ?? 0
+  );
+
+  const hasVariantPrice =
+    Number.isFinite(variantPrice) &&
+    variantPrice > 0;
+
+  /* =======================================================
+     STARTING WEIGHT
+     ======================================================= */
+
+  const displayStartingQuantity =
+    Number(
+      startingVariant?.weightKg ??
+        product?.minOrderKg ??
+        0.25
+    );
+
+  /* =======================================================
+     STARTING PRICE
+     
+     Variant price is already the price
+     for that pack.
+
+     Old product structure:
+     pricePerKg × weight
+     ======================================================= */
+
+  const startingPrice = hasVariantPrice
+    ? variantPrice
+    : pricePerKg *
+      displayStartingQuantity;
+
+  /* =======================================================
+     COMPARE AT PRICE / DISCOUNT
+     ======================================================= */
+
+  const compareAtPrice = Number(
+    startingVariant?.compareAtPrice ?? 0
+  );
+
+  const discountPercentage = Number(
+    startingVariant?.discountPercentage ??
+      0
+  );
+
+  /* =======================================================
+     STOCK LOGIC
+     
+     IMPORTANT FIX:
+     
+     Do NOT assume:
+     
+     undefined stockKg = sold out
+     
+     Because the new backend may not provide
+     stockKg for every product.
+
+     Explicit stockKg <= 0 means sold out.
+     
+     Missing stockKg means stock status is unknown,
+     so customer can still add product to cart.
+     ======================================================= */
+
+  const hasStockField =
+    product?.stockKg !== undefined &&
+    product?.stockKg !== null &&
+    product?.stockKg !== "";
+
+  const stockKg = hasStockField
+    ? Number(product.stockKg)
+    : null;
+
+  const isExplicitlyOutOfStock =
+    hasStockField &&
+    Number.isFinite(stockKg) &&
+    stockKg <= 0;
+
+  const lowStockThreshold = Number(
+    product?.lowStockThresholdKg ?? 5
+  );
+
+  const isLowStock =
+    hasStockField &&
+    Number.isFinite(stockKg) &&
+    stockKg > 0 &&
+    stockKg <= lowStockThreshold;
+
+  /* =======================================================
+     FINAL AVAILABILITY
+     
+     If product has active variants:
+       available unless explicitly sold out.
+
+     If no variants:
+       preserve compatibility with old products.
+     ======================================================= */
+
+  const isOutOfStock =
+    isExplicitlyOutOfStock;
+
+  /* =======================================================
+     FORMAT WEIGHT
+     ======================================================= */
+
+  const formatWeight = (kg) => {
+    const value = Number(kg || 0);
+
+    if (value === 0.25) {
+      return "250 g";
+    }
+
+    if (value === 0.5) {
+      return "500 g";
+    }
+
+    if (value === 0.75) {
+      return "750 g";
+    }
+
+    if (value === 1) {
+      return "1 KG";
+    }
+
+    if (value < 1) {
+      return `${Math.round(
+        value * 1000
+      )} g`;
+    }
+
+    return `${value} KG`;
+  };
+
+  /* =======================================================
+     DISPLAY PRICE
+     ======================================================= */
+
+  const formattedStartingPrice =
+    Number.isFinite(startingPrice)
+      ? startingPrice.toLocaleString(
+          "en-IN",
+          {
+            maximumFractionDigits: 2,
+          }
+        )
+      : "0";
 
   /* =======================================================
      WISHLIST
-  ======================================================= */
+     ======================================================= */
 
-  const handleWishlist = (
-    event
-  ) => {
+  const handleWishlist = (event) => {
     event.preventDefault();
     event.stopPropagation();
 
@@ -259,9 +312,7 @@ export default function ProductCard({
 
   /* =======================================================
      ADD TO CART
-     
-     Add the smallest available active variant.
-  ======================================================= */
+     ======================================================= */
 
   const handleAddToCart = () => {
     if (!productId) {
@@ -273,21 +324,94 @@ export default function ProductCard({
       return;
     }
 
-    if (
-      !firstVariant ||
-      startingPrice <= 0
-    ) {
-      console.error(
-        "Cart error: No valid product variant",
-        product
+    if (isOutOfStock) {
+      return;
+    }
+
+    /* -----------------------------------------------------
+       VARIANT PRODUCT
+       ----------------------------------------------------- */
+
+    if (startingVariant) {
+      dispatch(
+        addToCart({
+          ...product,
+
+          id: productId,
+
+          /* Selected variant */
+
+          selectedVariant:
+            startingVariant,
+
+          variantId:
+            startingVariant?._id ??
+            `${productId}-${startingVariant.weightKg}`,
+
+          weightKg:
+            Number(
+              startingVariant.weightKg
+            ),
+
+          quantityKg:
+            Number(
+              startingVariant.weightKg
+            ),
+
+          quantity:
+            1,
+
+          unit: "pack",
+
+          price:
+            Number(
+              startingVariant.price
+            ),
+
+          pricePerKg,
+
+          compareAtPrice:
+            Number(
+              startingVariant.compareAtPrice ??
+                0
+            ),
+
+          quantityStepKg:
+            Number(
+              startingVariant.weightKg
+            ),
+
+          minOrderKg:
+            Number(
+              startingVariant.weightKg
+            ),
+
+          maxOrderKg:
+            Number(
+              product?.maxOrderKg ??
+                20
+            ),
+        })
       );
 
       return;
     }
 
-    if (isOutOfStock) {
-      return;
-    }
+    /* -----------------------------------------------------
+       OLD / LOCAL PRODUCT FALLBACK
+       ----------------------------------------------------- */
+
+    const minimumQuantity = Number(
+      product?.minOrderKg ?? 0.25
+    );
+
+    const quantityStep = Number(
+      product?.quantityStepKg ?? 0.25
+    );
+
+    const maximumQuantity = Number(
+      product?.maxOrderKg ?? 20
+    );
 
     dispatch(
       addToCart({
@@ -295,64 +419,45 @@ export default function ProductCard({
 
         id: productId,
 
-        /* Selected variant */
+        pricePerKg,
 
-        selectedVariant:
-          firstVariant,
-
-        variantWeightKg:
-          startingWeight,
-
-        variantLabel:
-          firstVariant.label ||
-          formatWeight(
-            startingWeight
-          ),
-
-        /* Actual pack price */
-
-        price:
-          startingPrice,
-
-        unitPrice:
-          startingPrice,
-
-        pricePerKg:
-          legacyPrice,
-
-        /* Cart quantity */
-
-        quantity: 1,
+        quantity:
+          minimumQuantity,
 
         quantityKg:
-          startingWeight,
+          minimumQuantity,
 
         quantityStepKg:
-          startingWeight,
+          quantityStep,
 
         minOrderKg:
-          startingWeight,
+          minimumQuantity,
 
         maxOrderKg:
-          Number(
-            product?.maxOrderKg ??
-              20
-          ),
+          maximumQuantity,
 
-        unit: "pack",
+        unit: "kg",
       })
     );
   };
 
   /* =======================================================
+     INVALID PRODUCT
+     ======================================================= */
+
+  if (!product) {
+    return null;
+  }
+
+  /* =======================================================
      RENDER
-  ======================================================= */
+     ======================================================= */
 
   return (
     <motion.article
       initial={{
         opacity: 0,
-        y: 24,
+        y: 20,
       }}
       animate={{
         opacity: 1,
@@ -362,8 +467,7 @@ export default function ProductCard({
         y: -7,
       }}
       transition={{
-        duration: 0.4,
-        ease: "easeOut",
+        duration: 0.35,
       }}
       className="
         group
@@ -373,73 +477,73 @@ export default function ProductCard({
         border
         border-slate-100
         bg-white
-        shadow-[0_12px_45px_rgba(15,23,42,0.055)]
-        transition-all
+        shadow-[0_12px_40px_rgba(15,23,42,0.06)]
+        transition-shadow
         duration-500
-        hover:border-pink-100
-        hover:shadow-[0_28px_80px_rgba(15,23,42,0.12)]
+        hover:shadow-[0_25px_70px_rgba(15,23,42,0.13)]
       "
     >
-
       {/* =================================================
           IMAGE
-      ================================================= */}
+          ================================================= */}
 
-      <div
-        className="
-          relative
-          overflow-hidden
-          bg-slate-100
-        "
-      >
+      <div className="relative overflow-hidden">
 
         <Link
-          to={`/product/${productId}`}
-          className="block"
+          to={
+            productId
+              ? `/product/${productId}`
+              : "#"
+          }
+          aria-label={`View ${
+            product?.name ||
+            "flower"
+          }`}
         >
-
-          <div className="relative aspect-[4/4.35] overflow-hidden">
-
-            <img
-              src={image}
-              alt={
-                product?.name ||
-                "Flower"
-              }
-              loading="lazy"
-              className="
-                h-full
-                w-full
-                object-cover
-                transition-transform
-                duration-[900ms]
-                ease-out
-                group-hover:scale-[1.07]
-              "
-            />
-
-            {/* IMAGE GRADIENT */}
-
-            <div
-              className="
-                pointer-events-none
-                absolute
-                inset-0
-                bg-gradient-to-t
-                from-black/35
-                via-transparent
-                to-transparent
-                opacity-60
-              "
-            />
-
-          </div>
-
+          <img
+            src={
+              product?.image ||
+              product?.images?.[0]?.url ||
+              "/placeholder-flower.jpg"
+            }
+            alt={
+              product?.name ||
+              "Flower"
+            }
+            loading="lazy"
+            className="
+              h-80
+              w-full
+              object-cover
+              transition-transform
+              duration-700
+              ease-out
+              group-hover:scale-110
+            "
+          />
         </Link>
 
+        {/* IMAGE GRADIENT */}
+
+        <div
+          className="
+            pointer-events-none
+            absolute
+            inset-0
+            bg-gradient-to-t
+            from-black/45
+            via-transparent
+            to-transparent
+            opacity-0
+            transition-opacity
+            duration-500
+            group-hover:opacity-100
+          "
+        />
+
         {/* =================================================
-            TOP LEFT BADGES
-        ================================================= */}
+            BADGES
+            ================================================= */}
 
         <div
           className="
@@ -455,101 +559,98 @@ export default function ProductCard({
         >
 
           {isBestSeller && (
-            <span
+            <div
               className="
                 inline-flex
                 items-center
                 gap-1.5
                 rounded-full
-                bg-white/95
+                bg-amber-400
                 px-3.5
                 py-2
                 text-[10px]
-                font-bold
+                font-extrabold
                 uppercase
-                tracking-[0.16em]
-                text-slate-900
-                shadow-lg
-                backdrop-blur-md
-              "
-            >
-              <Star
-                size={12}
-                className="fill-amber-400 text-amber-400"
-              />
-
-              Best Seller
-            </span>
-          )}
-
-          {isNew && (
-            <span
-              className="
-                rounded-full
-                bg-pink-600
-                px-3.5
-                py-2
-                text-[10px]
-                font-bold
-                uppercase
-                tracking-[0.16em]
+                tracking-[0.12em]
                 text-white
                 shadow-lg
               "
             >
-              New
-            </span>
+              <Sparkles size={12} />
+              Best Seller
+            </div>
           )}
 
-          {isWholesale && (
-            <span
+          {isNewArrival && (
+            <div
               className="
                 rounded-full
-                bg-slate-950
+                bg-white/95
                 px-3.5
                 py-2
                 text-[10px]
-                font-bold
+                font-extrabold
                 uppercase
-                tracking-[0.16em]
+                tracking-[0.12em]
+                text-pink-600
+                shadow-lg
+                backdrop-blur-md
+              "
+            >
+              New
+            </div>
+          )}
+
+          {isWholesale && (
+            <div
+              className="
+                rounded-full
+                bg-gray-950
+                px-3.5
+                py-2
+                text-[10px]
+                font-extrabold
+                uppercase
+                tracking-[0.12em]
                 text-white
                 shadow-lg
               "
             >
               Wholesale
-            </span>
+            </div>
           )}
 
         </div>
 
         {/* =================================================
             DISCOUNT
-        ================================================= */}
+            ================================================= */}
 
         {discountPercentage > 0 && (
-          <span
+          <div
             className="
               absolute
               bottom-4
               left-4
               z-10
               rounded-full
-              bg-rose-600
+              bg-white/95
               px-3
               py-1.5
               text-xs
               font-bold
-              text-white
+              text-emerald-600
               shadow-lg
+              backdrop-blur-md
             "
           >
             {discountPercentage}% OFF
-          </span>
+          </div>
         )}
 
         {/* =================================================
-            ACTION BUTTONS
-        ================================================= */}
+            ACTIONS
+            ================================================= */}
 
         <div
           className="
@@ -559,7 +660,7 @@ export default function ProductCard({
             z-20
             flex
             flex-col
-            gap-2.5
+            gap-3
           "
         >
 
@@ -582,6 +683,7 @@ export default function ProductCard({
                 : "Add to wishlist"
             }
             className={`
+              relative
               flex
               h-11
               w-11
@@ -590,7 +692,7 @@ export default function ProductCard({
               rounded-full
               border
               shadow-lg
-              backdrop-blur-xl
+              backdrop-blur-md
               transition-all
               duration-300
 
@@ -601,15 +703,19 @@ export default function ProductCard({
               }
             `}
           >
-
             <Heart
-              size={18}
+              size={19}
               strokeWidth={1.8}
-              className={
-                isWishlisted
-                  ? "fill-pink-500 text-pink-500"
-                  : ""
-              }
+              className={`
+                transition-all
+                duration-300
+
+                ${
+                  isWishlisted
+                    ? "fill-pink-500 text-pink-500"
+                    : ""
+                }
+              `}
             />
 
             {isWishlisted && (
@@ -629,18 +735,21 @@ export default function ProductCard({
                 "
               >
                 <Check
-                  size={9}
+                  size={10}
                   strokeWidth={3}
                 />
               </span>
             )}
-
           </motion.button>
 
           {/* VIEW */}
 
           <Link
-            to={`/product/${productId}`}
+            to={
+              productId
+                ? `/product/${productId}`
+                : "#"
+            }
             aria-label={`View ${
               product?.name ||
               "product"
@@ -657,7 +766,7 @@ export default function ProductCard({
               bg-white/95
               text-slate-600
               shadow-lg
-              backdrop-blur-xl
+              backdrop-blur-md
               transition-all
               duration-300
               hover:border-pink-200
@@ -665,48 +774,46 @@ export default function ProductCard({
               hover:text-pink-600
             "
           >
-
             <Eye
-              size={18}
+              size={19}
               strokeWidth={1.8}
             />
-
           </Link>
 
         </div>
 
         {/* =================================================
             QUICK VIEW
-        ================================================= */}
+            ================================================= */}
 
         <Link
-          to={`/product/${productId}`}
+          to={
+            productId
+              ? `/product/${productId}`
+              : "#"
+          }
           className="
             absolute
             bottom-5
             left-1/2
-            z-20
+            z-10
             -translate-x-1/2
-            translate-y-3
             rounded-full
             border
-            border-white/70
+            border-white/60
             bg-white/95
             px-6
             py-3
-            text-xs
-            font-bold
-            uppercase
-            tracking-[0.12em]
+            text-sm
+            font-semibold
             text-slate-900
             opacity-0
             shadow-xl
             backdrop-blur-md
             transition-all
             duration-500
-            hover:bg-slate-950
+            hover:bg-pink-600
             hover:text-white
-            group-hover:translate-y-0
             group-hover:opacity-100
           "
         >
@@ -717,55 +824,35 @@ export default function ProductCard({
 
       {/* =================================================
           CONTENT
-      ================================================= */}
+          ================================================= */}
 
       <div className="p-6">
 
         {/* CATEGORY */}
 
-        <div className="flex items-center justify-between gap-3">
-
-          <span
-            className="
-              text-[10px]
-              font-bold
-              uppercase
-              tracking-[0.2em]
-              text-pink-500
-            "
-          >
-            {product?.category ||
-              "Flowers"}
-          </span>
-
-          {sameDayDelivery && (
-            <span
-              className="
-                inline-flex
-                items-center
-                gap-1
-                text-[10px]
-                font-semibold
-                text-emerald-600
-              "
-            >
-              <Truck
-                size={12}
-              />
-
-              Same Day
-            </span>
-          )}
-
-        </div>
+        <span
+          className="
+            text-[10px]
+            font-extrabold
+            uppercase
+            tracking-[0.22em]
+            text-pink-500
+          "
+        >
+          {product?.category ||
+            "Flowers"}
+        </span>
 
         {/* NAME */}
 
         <Link
-          to={`/product/${productId}`}
+          to={
+            productId
+              ? `/product/${productId}`
+              : "#"
+          }
           className="block"
         >
-
           <h3
             className="
               mt-2
@@ -776,13 +863,12 @@ export default function ProductCard({
               text-slate-900
               transition-colors
               duration-300
-              group-hover:text-pink-600
+              hover:text-pink-600
             "
           >
             {product?.name ||
               "Beautiful Flowers"}
           </h3>
-
         </Link>
 
         {/* DESCRIPTION */}
@@ -799,74 +885,16 @@ export default function ProductCard({
         >
           {product?.shortDescription ||
             product?.description ||
-            "Freshly arranged flowers for every special moment."}
+            "Fresh premium flowers carefully selected for every special moment."}
         </p>
 
         {/* =================================================
-            RATING
-        ================================================= */}
-
-        {rating > 0 && (
-          <div
-            className="
-              mt-4
-              flex
-              items-center
-              gap-2
-            "
-          >
-
-            <div
-              className="
-                flex
-                items-center
-                gap-1
-                rounded-full
-                bg-amber-50
-                px-2.5
-                py-1
-              "
-            >
-              <Star
-                size={12}
-                className="
-                  fill-amber-400
-                  text-amber-400
-                "
-              />
-
-              <span
-                className="
-                  text-xs
-                  font-bold
-                  text-amber-700
-                "
-              >
-                {rating.toFixed(1)}
-              </span>
-            </div>
-
-            {reviewCount > 0 && (
-              <span
-                className="
-                  text-xs
-                  text-slate-400
-                "
-              >
-                {reviewCount} reviews
-              </span>
-            )}
-
-          </div>
-        )}
-
-        {/* =================================================
             PRICE
-        ================================================= */}
+            ================================================= */}
 
         <div
           className="
-            mt-5
+            mt-6
             flex
             items-end
             justify-between
@@ -878,36 +906,25 @@ export default function ProductCard({
 
             <p
               className="
-                text-[10px]
-                font-semibold
-                uppercase
-                tracking-[0.15em]
+                text-xs
+                font-medium
                 text-slate-400
               "
             >
               Starting from
             </p>
 
-            <div
-              className="
-                mt-1
-                flex
-                items-baseline
-                gap-2
-              "
-            >
+            <div className="mt-1 flex items-center gap-2">
 
               <h4
                 className="
                   text-2xl
                   font-bold
                   tracking-tight
-                  text-slate-900
+                  text-pink-600
                 "
               >
-                ₹{formatPrice(
-                  startingPrice
-                )}
+                ₹{formattedStartingPrice}
               </h4>
 
               {compareAtPrice >
@@ -915,13 +932,14 @@ export default function ProductCard({
                 <span
                   className="
                     text-sm
+                    font-medium
                     text-slate-400
                     line-through
                   "
                 >
                   ₹
-                  {formatPrice(
-                    compareAtPrice
+                  {compareAtPrice.toLocaleString(
+                    "en-IN"
                   )}
                 </span>
               )}
@@ -937,21 +955,34 @@ export default function ProductCard({
               "
             >
               {formatWeight(
-                startingWeight
-              )}{" "}
-              pack
+                displayStartingQuantity
+              )}
+
+              {pricePerKg > 0 &&
+                !startingVariant && (
+                  <>
+                    {" "}
+                    · ₹
+                    {pricePerKg.toLocaleString(
+                      "en-IN"
+                    )}
+                    /kg
+                  </>
+                )}
             </p>
 
           </div>
 
-          {/* ADD BUTTON */}
+          {/* =================================================
+              ADD BUTTON
+              ================================================= */}
 
           <motion.button
             type="button"
             whileHover={
               !isOutOfStock
                 ? {
-                    scale: 1.04,
+                    scale: 1.03,
                   }
                 : {}
             }
@@ -962,43 +993,49 @@ export default function ProductCard({
                   }
                 : {}
             }
-            disabled={
-              isOutOfStock ||
-              !firstVariant
-            }
             onClick={
               handleAddToCart
             }
+            disabled={isOutOfStock}
             className={`
               flex
-              h-12
               items-center
               gap-2
               rounded-full
               px-5
+              py-3
               text-sm
               font-bold
               text-white
-              shadow-lg
               transition-all
               duration-300
 
               ${
                 isOutOfStock
                   ? "cursor-not-allowed bg-slate-300 shadow-none"
-                  : "bg-gradient-to-r from-pink-500 to-rose-600 shadow-pink-200/50 hover:shadow-xl hover:shadow-pink-300/50"
+                  : "bg-gradient-to-r from-pink-500 to-rose-600 shadow-lg shadow-pink-200/50 hover:shadow-xl hover:shadow-pink-300/50"
               }
             `}
           >
 
-            <ShoppingCart
-              size={17}
-              strokeWidth={2}
-            />
+            {isOutOfStock ? (
+              <>
+                <PackageCheck
+                  size={17}
+                />
 
-            {isOutOfStock
-              ? "Sold Out"
-              : "Add"}
+                Sold Out
+              </>
+            ) : (
+              <>
+                <ShoppingCart
+                  size={17}
+                  strokeWidth={2}
+                />
+
+                Add
+              </>
+            )}
 
           </motion.button>
 
@@ -1006,78 +1043,103 @@ export default function ProductCard({
 
         {/* =================================================
             LOW STOCK
-        ================================================= */}
+            ================================================= */}
 
-        {isLowStock && (
+        {isLowStock &&
+          !isOutOfStock && (
+            <div
+              className="
+                mt-4
+                flex
+                items-center
+                gap-2
+                rounded-2xl
+                bg-amber-50
+                px-4
+                py-3
+              "
+            >
+              <PackageCheck
+                size={15}
+                className="text-amber-600"
+              />
+
+              <p
+                className="
+                  text-xs
+                  font-semibold
+                  text-amber-700
+                "
+              >
+                Only {stockKg} kg left
+              </p>
+            </div>
+          )}
+
+        {/* =================================================
+            WHOLESALE INFO
+            ================================================= */}
+
+        {isWholesale && (
+          <div
+            className="
+              mt-4
+              rounded-2xl
+              bg-slate-50
+              px-4
+              py-3
+            "
+          >
+            <p
+              className="
+                text-xs
+                font-semibold
+                text-slate-700
+              "
+            >
+              Wholesale available
+            </p>
+
+            <p
+              className="
+                mt-1
+                text-xs
+                text-slate-500
+              "
+            >
+              Bulk pricing available for
+              larger orders.
+            </p>
+          </div>
+        )}
+
+        {/* =================================================
+            DELIVERY
+            ================================================= */}
+
+        {product?.deliveryAvailable !==
+          false && (
           <div
             className="
               mt-4
               flex
               items-center
               gap-2
-              rounded-2xl
-              bg-amber-50
-              px-4
-              py-3
+              text-xs
+              font-medium
+              text-slate-400
             "
           >
-
-            <span
-              className="
-                h-2
-                w-2
-                rounded-full
-                bg-amber-500
-              "
+            <Truck
+              size={14}
+              className="text-pink-500"
             />
 
-            <p
-              className="
-                text-xs
-                font-semibold
-                text-amber-700
-              "
-            >
-              Only {formatWeight(
-                stockKg
-              )} available
-            </p>
-
+            {product?.sameDayDelivery
+              ? "Same-day delivery available"
+              : "Free delivery available"}
           </div>
         )}
-
-        {/* =================================================
-            DELIVERY
-        ================================================= */}
-
-        <div
-          className="
-            mt-4
-            flex
-            items-center
-            gap-2
-            border-t
-            border-slate-100
-            pt-4
-            text-xs
-            font-medium
-            text-slate-400
-          "
-        >
-
-          <Truck
-            size={14}
-            className="text-pink-500"
-          />
-
-          {sameDayDelivery
-            ? "Same-day delivery available"
-            : product?.deliveryAvailable !==
-                false
-            ? "Free delivery available"
-            : "Delivery available"}
-
-        </div>
 
       </div>
     </motion.article>

@@ -1,14 +1,51 @@
 import { createSlice } from "@reduxjs/toolkit";
 
-const savedUser = localStorage.getItem("user");
+// =====================================================
+// SAFE USER RESTORE
+// =====================================================
+
+const getSavedUser = () => {
+  try {
+    const savedUser = localStorage.getItem("user");
+
+    if (!savedUser) {
+      return null;
+    }
+
+    return JSON.parse(savedUser);
+  } catch (error) {
+    console.error(
+      "Failed to restore saved user:",
+      error
+    );
+
+    localStorage.removeItem("user");
+
+    return null;
+  }
+};
+
+// =====================================================
+// INITIAL STATE
+// =====================================================
 
 const initialState = {
-  user: savedUser
-    ? JSON.parse(savedUser)
-    : null,
+  user: getSavedUser(),
 
-  token: localStorage.getItem("token"),
+  /*
+    JWT token frontend/localStorage mein store nahi hoga.
+
+    Backend HTTP-only cookie mein token store karega.
+  */
+
+  isAuthenticated: !!localStorage.getItem("user"),
+
+  loading: false,
 };
+
+// =====================================================
+// AUTH SLICE
+// =====================================================
 
 const authSlice = createSlice({
   name: "auth",
@@ -16,36 +53,90 @@ const authSlice = createSlice({
   initialState,
 
   reducers: {
+    // =================================================
+    // LOGIN SUCCESS
+    // =================================================
+
     loginSuccess: (state, action) => {
-      const { user, token } = action.payload;
+      const user = action.payload?.user || null;
 
       state.user = user;
-      state.token = token;
 
-      localStorage.setItem(
-        "token",
-        token
-      );
+      state.isAuthenticated = !!user;
 
-      localStorage.setItem(
-        "user",
-        JSON.stringify(user)
-      );
+      state.loading = false;
+
+      // Sirf user information save karo.
+      // JWT token kabhi localStorage mein mat save karo.
+
+      if (user) {
+        localStorage.setItem(
+          "user",
+          JSON.stringify(user)
+        );
+      } else {
+        localStorage.removeItem("user");
+      }
     },
+
+    // =================================================
+    // LOGOUT
+    // =================================================
 
     logout: (state) => {
       state.user = null;
-      state.token = null;
 
-      localStorage.removeItem("token");
+      state.isAuthenticated = false;
+
+      state.loading = false;
+
       localStorage.removeItem("user");
+    },
+
+    // =================================================
+    // AUTH LOADING
+    // =================================================
+
+    setAuthLoading: (state, action) => {
+      state.loading = action.payload;
+    },
+
+    // =================================================
+    // SET USER
+    // =================================================
+
+    setUser: (state, action) => {
+      const user = action.payload || null;
+
+      state.user = user;
+
+      state.isAuthenticated = !!user;
+
+      if (user) {
+        localStorage.setItem(
+          "user",
+          JSON.stringify(user)
+        );
+      } else {
+        localStorage.removeItem("user");
+      }
     },
   },
 });
 
+// =====================================================
+// EXPORT ACTIONS
+// =====================================================
+
 export const {
   loginSuccess,
   logout,
+  setAuthLoading,
+  setUser,
 } = authSlice.actions;
+
+// =====================================================
+// EXPORT REDUCER
+// =====================================================
 
 export default authSlice.reducer;
