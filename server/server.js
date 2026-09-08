@@ -8,43 +8,26 @@ import rateLimit from "express-rate-limit";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// =====================================================
-// ENVIRONMENT
-// =====================================================
-
+// Load environment variables
 dotenv.config();
 
-// =====================================================
-// ROUTES
-// =====================================================
-
+// Routes
 import authRoutes from "./routes/authRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 
-// Add these later when their files exist:
-//
-// import userRoutes from "./routes/userRoutes.js";
-// import orderRoutes from "./routes/orderRoutes.js";
-// import categoryRoutes from "./routes/categoryRoutes.js";
-// import reviewRoutes from "./routes/reviewRoutes.js";
-// import couponRoutes from "./routes/couponRoutes.js";
-
-// =====================================================
-// APP
-// =====================================================
+// ==========================================
+// APP INITIALIZATION
+// ==========================================
 
 const app = express();
 
-// =====================================================
-// PATH SETUP
-// =====================================================
-
+// __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// =====================================================
-// ENV VARIABLES
-// =====================================================
+// ==========================================
+// ENVIRONMENT VARIABLES
+// ==========================================
 
 const PORT = Number(process.env.PORT) || 5000;
 
@@ -56,15 +39,11 @@ const CLIENT_URL =
   process.env.CLIENT_URL ||
   "http://localhost:5173";
 
-// =====================================================
+// ==========================================
 // BASIC SECURITY
-// =====================================================
+// ==========================================
 
 app.disable("x-powered-by");
-
-// =====================================================
-// HELMET
-// =====================================================
 
 app.use(
   helmet({
@@ -74,14 +53,48 @@ app.use(
   })
 );
 
-// =====================================================
-// CORS
-// =====================================================
+// ==========================================
+// CORS CONFIGURATION
+// ==========================================
+
+// Allowed frontend URLs
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://the-flower-shop-webs.netlify.app",
+  CLIENT_URL,
+].filter(Boolean);
+
+// Remove duplicate origins
+const uniqueOrigins = [...new Set(allowedOrigins)];
+
+console.log("🌐 Allowed CORS Origins:");
+uniqueOrigins.forEach((origin) => {
+  console.log(`   → ${origin}`);
+});
 
 app.use(
   cors({
-    origin: CLIENT_URL,
+    origin: (origin, callback) => {
+      // Allow requests without an Origin header
+      // (Postman, server-to-server, etc.)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (uniqueOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.log(`❌ CORS blocked origin: ${origin}`);
+
+      return callback(
+        new Error("Not allowed by CORS")
+      );
+    },
+
     credentials: true,
+
     methods: [
       "GET",
       "POST",
@@ -90,6 +103,7 @@ app.use(
       "DELETE",
       "OPTIONS",
     ],
+
     allowedHeaders: [
       "Content-Type",
       "Authorization",
@@ -97,9 +111,9 @@ app.use(
   })
 );
 
-// =====================================================
-// BODY PARSER
-// =====================================================
+// ==========================================
+// BODY PARSERS
+// ==========================================
 
 app.use(
   express.json({
@@ -114,15 +128,15 @@ app.use(
   })
 );
 
-// =====================================================
+// ==========================================
 // COOKIE PARSER
-// =====================================================
+// ==========================================
 
 app.use(cookieParser());
 
-// =====================================================
+// ==========================================
 // RATE LIMITER
-// =====================================================
+// ==========================================
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -140,13 +154,11 @@ const apiLimiter = rateLimit({
   },
 });
 
-// Apply rate limit to API
-
 app.use("/api", apiLimiter);
 
-// =====================================================
+// ==========================================
 // STATIC UPLOADS
-// =====================================================
+// ==========================================
 
 app.use(
   "/uploads",
@@ -155,66 +167,54 @@ app.use(
   )
 );
 
-// =====================================================
+// ==========================================
 // HEALTH CHECK
-// =====================================================
+// ==========================================
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "The Flower Shop API is running 🌸",
+    message:
+      "The Flower Shop API is running 🌸",
+
     environment:
       process.env.NODE_ENV || "development",
+
     timestamp: new Date().toISOString(),
   });
 });
 
-// =====================================================
+// ==========================================
 // API ROOT
-// =====================================================
+// ==========================================
 
 app.get("/api", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "Welcome to The Flower Shop API 🌸",
+    message:
+      "Welcome to The Flower Shop API 🌸",
   });
 });
 
-// =====================================================
-// AUTH ROUTES
-// =====================================================
+// ==========================================
+// API ROUTES
+// ==========================================
 
+// Authentication
 app.use(
   "/api/auth",
   authRoutes
 );
 
-// =====================================================
-// PRODUCT ROUTES
-// =====================================================
-
+// Products
 app.use(
   "/api/products",
   productRoutes
 );
 
-// =====================================================
-// FUTURE ROUTES
-// =====================================================
-
-// app.use("/api/users", userRoutes);
-
-// app.use("/api/orders", orderRoutes);
-
-// app.use("/api/categories", categoryRoutes);
-
-// app.use("/api/reviews", reviewRoutes);
-
-// app.use("/api/coupons", couponRoutes);
-
-// =====================================================
-// 404 API HANDLER
-// =====================================================
+// ==========================================
+// 404 HANDLER
+// ==========================================
 
 app.use((req, res) => {
   res.status(404).json({
@@ -224,9 +224,9 @@ app.use((req, res) => {
   });
 });
 
-// =====================================================
+// ==========================================
 // GLOBAL ERROR HANDLER
-// =====================================================
+// ==========================================
 
 app.use(
   (error, req, res, next) => {
@@ -235,10 +235,7 @@ app.use(
       error
     );
 
-    // -----------------------------------------------
-    // JSON PARSING ERROR
-    // -----------------------------------------------
-
+    // JSON parsing error
     if (
       error instanceof SyntaxError &&
       error.status === 400 &&
@@ -250,10 +247,7 @@ app.use(
       });
     }
 
-    // -----------------------------------------------
-    // MULTER FILE ERROR
-    // -----------------------------------------------
-
+    // Multer upload error
     if (
       error.name === "MulterError"
     ) {
@@ -265,9 +259,17 @@ app.use(
       });
     }
 
-    // -----------------------------------------------
-    // DEFAULT ERROR
-    // -----------------------------------------------
+    // CORS error
+    if (
+      error.message ===
+      "Not allowed by CORS"
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "CORS policy blocked this request.",
+      });
+    }
 
     return res.status(
       error.statusCode || 500
@@ -287,15 +289,15 @@ app.use(
   }
 );
 
-// =====================================================
+// ==========================================
 // DATABASE CONNECTION
-// =====================================================
+// ==========================================
 
 const connectDatabase = async () => {
   try {
     if (!MONGO_URI) {
       throw new Error(
-        "MONGO_URI is missing from .env"
+        "MONGO_URI is missing from environment variables"
       );
     }
 
@@ -304,13 +306,23 @@ const connectDatabase = async () => {
         MONGO_URI
       );
 
+    console.log("");
     console.log(
-      `✅ MongoDB connected: ${connection.connection.host}`
+      "======================================="
     );
-
+    console.log(
+      "✅ MongoDB connected successfully"
+    );
+    console.log(
+      `📡 Host: ${connection.connection.host}`
+    );
     console.log(
       `📦 Database: ${connection.connection.name}`
     );
+    console.log(
+      "======================================="
+    );
+    console.log("");
   } catch (error) {
     console.error(
       "❌ MongoDB connection failed:",
@@ -321,48 +333,56 @@ const connectDatabase = async () => {
   }
 };
 
-// =====================================================
-// SERVER START
-// =====================================================
+// ==========================================
+// START SERVER
+// ==========================================
 
 const startServer = async () => {
   try {
     await connectDatabase();
 
-    app.listen(
-      PORT,
-      () => {
-        console.log("");
-        console.log(
-          "🌸 ======================================="
-        );
-        console.log(
-          "🌸      THE FLOWER SHOP API"
-        );
-        console.log(
-          "🌸 ======================================="
-        );
-        console.log(
-          `🚀 Server: http://localhost:${PORT}`
-        );
-        console.log(
-          `💚 Health: http://localhost:${PORT}/api/health`
-        );
-        console.log(
-          `🌷 Products: http://localhost:${PORT}/api/products`
-        );
-        console.log(
-          `🔐 Auth: http://localhost:${PORT}/api/auth`
-        );
-        console.log(
-          `📁 Uploads: http://localhost:${PORT}/uploads`
-        );
-        console.log(
-          "🌸 ======================================="
-        );
-        console.log("");
-      }
-    );
+    app.listen(PORT, () => {
+      console.log("");
+      console.log(
+        "🌸 ======================================="
+      );
+      console.log(
+        "🌸       THE FLOWER SHOP API"
+      );
+      console.log(
+        "🌸 ======================================="
+      );
+
+      console.log(
+        `🚀 Server running on port: ${PORT}`
+      );
+
+      console.log(
+        `💚 Health: /api/health`
+      );
+
+      console.log(
+        `🌷 Products: /api/products`
+      );
+
+      console.log(
+        `🔐 Auth: /api/auth`
+      );
+
+      console.log(
+        `📁 Uploads: /uploads`
+      );
+
+      console.log(
+        `🌐 Frontend: ${CLIENT_URL}`
+      );
+
+      console.log(
+        "🌸 ======================================="
+      );
+
+      console.log("");
+    });
   } catch (error) {
     console.error(
       "❌ Server startup failed:",
@@ -373,9 +393,9 @@ const startServer = async () => {
   }
 };
 
-// =====================================================
-// PROCESS ERROR HANDLING
-// =====================================================
+// ==========================================
+// PROCESS ERROR HANDLERS
+// ==========================================
 
 process.on(
   "unhandledRejection",
@@ -399,8 +419,8 @@ process.on(
   }
 );
 
-// =====================================================
-// START
-// =====================================================
+// ==========================================
+// START APPLICATION
+// ==========================================
 
 startServer();
