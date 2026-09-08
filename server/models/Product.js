@@ -29,12 +29,11 @@ const productImageSchema = new mongoose.Schema(
 
 const productVariantSchema = new mongoose.Schema(
   {
-    /* -------------------------------------------------
-       PACK SIZE
-       0.25 = 250g
-       0.5  = 500g
-       1    = 1KG
-    ------------------------------------------------- */
+    /*
+      0.25 = 250g
+      0.5  = 500g
+      1    = 1KG
+    */
 
     weightKg: {
       type: Number,
@@ -42,23 +41,11 @@ const productVariantSchema = new mongoose.Schema(
       enum: [0.25, 0.5, 1],
     },
 
-    /* -------------------------------------------------
-       DISPLAY LABEL
-       Example:
-       250 g
-       500 g
-       1 KG
-    ------------------------------------------------- */
-
     label: {
       type: String,
       required: true,
       trim: true,
     },
-
-    /* -------------------------------------------------
-       SELLING PRICE FOR THIS PACK
-    ------------------------------------------------- */
 
     price: {
       type: Number,
@@ -66,19 +53,11 @@ const productVariantSchema = new mongoose.Schema(
       min: [0, "Price cannot be negative"],
     },
 
-    /* -------------------------------------------------
-       MRP / ORIGINAL PRICE
-    ------------------------------------------------- */
-
     compareAtPrice: {
       type: Number,
       default: 0,
       min: [0, "Compare price cannot be negative"],
     },
-
-    /* -------------------------------------------------
-       AUTOMATIC DISCOUNT
-    ------------------------------------------------- */
 
     discountPercentage: {
       type: Number,
@@ -86,10 +65,6 @@ const productVariantSchema = new mongoose.Schema(
       min: 0,
       max: 100,
     },
-
-    /* -------------------------------------------------
-       VARIANT ACTIVE STATUS
-    ------------------------------------------------- */
 
     isActive: {
       type: Boolean,
@@ -125,6 +100,7 @@ const productSchema = new mongoose.Schema(
       sparse: true,
       lowercase: true,
       trim: true,
+      index: true,
     },
 
     description: {
@@ -161,13 +137,14 @@ const productSchema = new mongoose.Schema(
       lowercase: true,
     },
 
-    /* =================================================
-       PACK SIZE / VARIANTS
-    ================================================= */
+    /* -------------------------------------------------
+       VARIANTS
+    ------------------------------------------------- */
 
     variants: {
       type: [productVariantSchema],
       required: true,
+
       validate: {
         validator: function (variants) {
           if (!Array.isArray(variants)) {
@@ -180,11 +157,9 @@ const productSchema = new mongoose.Schema(
 
           const allowedWeights = [0.25, 0.5, 1];
 
-          const weights = variants.map(
-            (variant) => Number(variant.weightKg)
+          const weights = variants.map((variant) =>
+            Number(variant.weightKg)
           );
-
-          /* Only 250g, 500g and 1KG */
 
           if (
             weights.some(
@@ -194,8 +169,6 @@ const productSchema = new mongoose.Schema(
           ) {
             return false;
           }
-
-          /* No duplicate pack sizes */
 
           return (
             new Set(weights).size ===
@@ -209,8 +182,7 @@ const productSchema = new mongoose.Schema(
     },
 
     /* -------------------------------------------------
-       DEFAULT / STARTING PRICE
-       Used for listing, sorting and filters.
+       PRICE REFERENCES
     ------------------------------------------------- */
 
     pricePerKg: {
@@ -232,20 +204,16 @@ const productSchema = new mongoose.Schema(
       max: 100,
     },
 
-    /* -------------------------------------------------
-       UNIT
-    ------------------------------------------------- */
-
     unit: {
       type: String,
       enum: ["kg"],
       default: "kg",
     },
 
-    /* =================================================
+    /* -------------------------------------------------
        INVENTORY
-       STOCK IS ALWAYS STORED IN KG
-    ================================================= */
+       Stock is stored in KG
+    ------------------------------------------------- */
 
     stockKg: {
       type: Number,
@@ -257,7 +225,7 @@ const productSchema = new mongoose.Schema(
     lowStockThresholdKg: {
       type: Number,
       default: 5,
-      min: 0,
+      min: [0, "Low stock threshold cannot be negative"],
     },
 
     sku: {
@@ -266,6 +234,7 @@ const productSchema = new mongoose.Schema(
       sparse: true,
       uppercase: true,
       trim: true,
+      index: true,
     },
 
     /* -------------------------------------------------
@@ -311,7 +280,7 @@ const productSchema = new mongoose.Schema(
     },
 
     /* -------------------------------------------------
-       PRODUCT FLAGS
+       FLAGS
     ------------------------------------------------- */
 
     featured: {
@@ -419,6 +388,11 @@ productSchema.index({
 });
 
 productSchema.index({
+  newArrival: 1,
+  isActive: 1,
+});
+
+productSchema.index({
   createdAt: -1,
 });
 
@@ -426,6 +400,19 @@ productSchema.index({
   stockKg: 1,
   isActive: 1,
 });
+
+/* =====================================================
+   SLUG HELPER
+===================================================== */
+
+const generateSlug = (text) => {
+  return String(text)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+};
 
 /* =====================================================
    PRE VALIDATE
@@ -441,7 +428,15 @@ productSchema.pre("validate", function (next) {
   }
 
   /* -------------------------------------------------
-     Calculate variant discounts
+     Generate slug
+  ------------------------------------------------- */
+
+  if (this.isModified("name") || !this.slug) {
+    this.slug = generateSlug(this.name);
+  }
+
+  /* -------------------------------------------------
+     Variant discounts
   ------------------------------------------------- */
 
   this.variants.forEach((variant) => {
@@ -449,13 +444,12 @@ productSchema.pre("validate", function (next) {
       variant.compareAtPrice > 0 &&
       variant.compareAtPrice > variant.price
     ) {
-      variant.discountPercentage =
-        Math.round(
-          ((variant.compareAtPrice -
-            variant.price) /
-            variant.compareAtPrice) *
-            100
-        );
+      variant.discountPercentage = Math.round(
+        ((variant.compareAtPrice -
+          variant.price) /
+          variant.compareAtPrice) *
+          100
+      );
     } else {
       variant.discountPercentage = 0;
     }
@@ -469,20 +463,13 @@ productSchema.pre("validate", function (next) {
 ===================================================== */
 
 productSchema.pre("save", function (next) {
-  /*
-   * We use the 1KG variant as the
-   * pricePerKg reference when available.
-   */
-
-  const oneKgVariant =
-    this.variants.find(
-      (variant) =>
-        Number(variant.weightKg) === 1
-    );
+  const oneKgVariant = this.variants.find(
+    (variant) =>
+      Number(variant.weightKg) === 1
+  );
 
   if (oneKgVariant) {
-    this.pricePerKg =
-      oneKgVariant.price;
+    this.pricePerKg = oneKgVariant.price;
 
     this.compareAtPricePerKg =
       oneKgVariant.compareAtPrice || 0;
@@ -490,13 +477,7 @@ productSchema.pre("save", function (next) {
     this.discountPercentage =
       oneKgVariant.discountPercentage || 0;
   } else {
-    /*
-     * If 1KG isn't available,
-     * use the first variant.
-     */
-
-    const firstVariant =
-      this.variants[0];
+    const firstVariant = this.variants[0];
 
     if (firstVariant) {
       this.pricePerKg =
@@ -521,15 +502,11 @@ productSchema.pre("save", function (next) {
    VIRTUALS
 ===================================================== */
 
-/* Product available */
-
 productSchema.virtual("isInStock").get(
   function () {
     return this.stockKg > 0;
   }
 );
-
-/* Low stock */
 
 productSchema.virtual("isLowStock").get(
   function () {
@@ -541,58 +518,41 @@ productSchema.virtual("isLowStock").get(
   }
 );
 
-/* Out of stock */
-
 productSchema.virtual("isOutOfStock").get(
   function () {
     return this.stockKg <= 0;
   }
 );
 
-/* -----------------------------------------------------
-   GET 250G VARIANT
------------------------------------------------------ */
-
 productSchema.virtual("variant250g").get(
   function () {
     return this.variants.find(
       (variant) =>
-        Number(variant.weightKg) ===
-        0.25
+        Number(variant.weightKg) === 0.25
     );
   }
 );
-
-/* -----------------------------------------------------
-   GET 500G VARIANT
------------------------------------------------------ */
 
 productSchema.virtual("variant500g").get(
   function () {
     return this.variants.find(
       (variant) =>
-        Number(variant.weightKg) ===
-        0.5
+        Number(variant.weightKg) === 0.5
     );
   }
 );
-
-/* -----------------------------------------------------
-   GET 1KG VARIANT
------------------------------------------------------ */
 
 productSchema.virtual("variant1kg").get(
   function () {
     return this.variants.find(
       (variant) =>
-        Number(variant.weightKg) ===
-        1
+        Number(variant.weightKg) === 1
     );
   }
 );
 
 /* =====================================================
-   JSON SETTINGS
+   JSON / OBJECT
 ===================================================== */
 
 productSchema.set("toJSON", {

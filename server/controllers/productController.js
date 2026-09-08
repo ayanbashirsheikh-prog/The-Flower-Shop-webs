@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Product from "../models/Product.js";
 
 /* =====================================================
@@ -20,7 +21,7 @@ const toBoolean = (
     return value;
   }
 
-  return value === "true";
+  return String(value).toLowerCase() === "true";
 };
 
 const toNumber = (
@@ -42,9 +43,7 @@ const toNumber = (
     : defaultValue;
 };
 
-const parseOccasions = (
-  occasion
-) => {
+const parseOccasions = (occasion) => {
   if (Array.isArray(occasion)) {
     return occasion
       .map((item) =>
@@ -67,19 +66,13 @@ const parseOccasions = (
    VARIANT PARSER
 ===================================================== */
 
-const parseVariants = (
-  variants
-) => {
+const parseVariants = (variants) => {
   let parsed = variants;
-
-  /* -------------------------------------------------
-     FormData sends arrays as JSON strings
-  ------------------------------------------------- */
 
   if (typeof parsed === "string") {
     try {
       parsed = JSON.parse(parsed);
-    } catch (error) {
+    } catch {
       throw new Error(
         "Invalid variants format"
       );
@@ -92,9 +85,11 @@ const parseVariants = (
     );
   }
 
-  /* -------------------------------------------------
-     Allowed weights
-  ------------------------------------------------- */
+  if (parsed.length === 0) {
+    throw new Error(
+      "At least one pack size is required"
+    );
+  }
 
   const allowedWeights = [
     0.25,
@@ -112,10 +107,9 @@ const parseVariants = (
         variant.price
       );
 
-      const compareAtPrice =
-        Number(
-          variant.compareAtPrice || 0
-        );
+      const compareAtPrice = Number(
+        variant.compareAtPrice || 0
+      );
 
       if (
         !allowedWeights.includes(
@@ -132,15 +126,22 @@ const parseVariants = (
         price <= 0
       ) {
         throw new Error(
-          `Invalid price for ${variant.label || "pack"}`
+          `Invalid price for ${
+            variant.label || "pack"
+          }`
         );
       }
 
       if (
+        !Number.isFinite(
+          compareAtPrice
+        ) ||
         compareAtPrice < 0
       ) {
         throw new Error(
-          `Invalid MRP for ${variant.label || "pack"}`
+          `Invalid MRP for ${
+            variant.label || "pack"
+          }`
         );
       }
 
@@ -149,7 +150,9 @@ const parseVariants = (
         compareAtPrice < price
       ) {
         throw new Error(
-          `MRP cannot be lower than selling price for ${variant.label || "pack"}`
+          `MRP cannot be lower than selling price for ${
+            variant.label || "pack"
+          }`
         );
       }
 
@@ -169,18 +172,14 @@ const parseVariants = (
       }
 
       let label =
-        variant.label;
+        variant.label?.trim();
 
       if (!label) {
         if (weightKg === 0.25) {
           label = "250 g";
-        }
-
-        if (weightKg === 0.5) {
+        } else if (weightKg === 0.5) {
           label = "500 g";
-        }
-
-        if (weightKg === 1) {
+        } else if (weightKg === 1) {
           label = "1 KG";
         }
       }
@@ -197,14 +196,9 @@ const parseVariants = (
     }
   );
 
-  /* -------------------------------------------------
-     Remove duplicate sizes
-  ------------------------------------------------- */
-
-  const weights =
-    result.map(
-      (item) => item.weightKg
-    );
+  const weights = result.map(
+    (item) => item.weightKg
+  );
 
   if (
     new Set(weights).size !==
@@ -222,27 +216,28 @@ const parseVariants = (
 };
 
 /* =====================================================
-   UPLOADED IMAGES
+   UPLOADED FILE HELPERS
 ===================================================== */
 
-const getUploadedImages = (
-  req,
-  productName
-) => {
+const getFiles = (req, fieldName) => {
   if (
     !req.files ||
-    !Array.isArray(req.files)
+    !req.files[fieldName]
   ) {
     return [];
   }
 
-  return req.files.map(
-    (file) => ({
-      url: `/uploads/products/${file.filename}`,
-      alt:
-        productName || "",
-    })
-  );
+  return req.files[fieldName];
+};
+
+const fileToImage = (
+  file,
+  alt = ""
+) => {
+  return {
+    url: `/uploads/products/${file.filename}`,
+    alt,
+  };
 };
 
 /* =====================================================
@@ -256,29 +251,21 @@ export const createProduct =
         name,
         description,
         shortDescription,
-
         variants,
-
         category,
         subcategory,
-
         stockKg,
         lowStockThresholdKg,
-
         sku,
-
         size,
         color,
         flowerType,
         occasion,
-
         featured,
         bestseller,
         newArrival,
-
         deliveryAvailable,
         sameDayDelivery,
-
         metaTitle,
         metaDescription,
       } = req.body;
@@ -288,9 +275,9 @@ export const createProduct =
       ------------------------------------------------- */
 
       if (
-        !name ||
-        !description ||
-        !category
+        !name?.trim() ||
+        !description?.trim() ||
+        !category?.trim()
       ) {
         return res.status(400).json({
           success: false,
@@ -307,23 +294,11 @@ export const createProduct =
 
       try {
         productVariants =
-          parseVariants(
-            variants
-          );
+          parseVariants(variants);
       } catch (error) {
         return res.status(400).json({
           success: false,
           message: error.message,
-        });
-      }
-
-      if (
-        productVariants.length === 0
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "At least one pack size is required",
         });
       }
 
@@ -335,9 +310,7 @@ export const createProduct =
 
       if (sku?.trim()) {
         normalizedSKU =
-          sku
-            .trim()
-            .toUpperCase();
+          sku.trim().toUpperCase();
 
         const existingSKU =
           await Product.findOne({
@@ -354,44 +327,56 @@ export const createProduct =
       }
 
       /* -------------------------------------------------
-         MAIN IMAGE
+         IMAGES
       ------------------------------------------------- */
 
-      let image = "";
+      const mainImage =
+        getFiles(req, "image")[0];
 
-      if (req.file) {
-        image =
-          `/uploads/products/${req.file.filename}`;
+      const additionalImages =
+        getFiles(req, "images");
+
+      const image = mainImage
+        ? `/uploads/products/${mainImage.filename}`
+        : "";
+
+      const images = [];
+
+      if (mainImage) {
+        images.push(
+          fileToImage(
+            mainImage,
+            name.trim()
+          )
+        );
       }
 
-      /* -------------------------------------------------
-         MULTIPLE IMAGES
-      ------------------------------------------------- */
-
-      const images =
-        getUploadedImages(
-          req,
-          name
-        );
+      additionalImages.forEach(
+        (file) => {
+          images.push(
+            fileToImage(
+              file,
+              name.trim()
+            )
+          );
+        }
+      );
 
       /* -------------------------------------------------
          OCCASIONS
       ------------------------------------------------- */
 
       const occasions =
-        parseOccasions(
-          occasion
-        );
+        parseOccasions(occasion);
 
       /* -------------------------------------------------
          STOCK
       ------------------------------------------------- */
 
-      const stock =
-        toNumber(
-          stockKg,
-          0
-        );
+      const stock = toNumber(
+        stockKg,
+        0
+      );
 
       const lowStockThreshold =
         toNumber(
@@ -413,8 +398,7 @@ export const createProduct =
 
       const product =
         await Product.create({
-          name:
-            name.trim(),
+          name: name.trim(),
 
           description:
             description.trim(),
@@ -431,34 +415,21 @@ export const createProduct =
           subcategory:
             subcategory
               ?.trim()
-              .toLowerCase() ||
-            "",
-
-          /* PACK SIZES */
+              .toLowerCase() || "",
 
           variants:
             productVariants,
 
-          /* INVENTORY */
-
-          stockKg:
-            stock,
+          stockKg: stock,
 
           lowStockThresholdKg:
             lowStockThreshold,
 
-          /* SKU */
-
-          sku:
-            normalizedSKU,
-
-          /* IMAGES */
+          sku: normalizedSKU,
 
           image,
 
           images,
-
-          /* DETAILS */
 
           size:
             size?.trim() || "",
@@ -467,34 +438,24 @@ export const createProduct =
             color?.trim() || "",
 
           flowerType:
-            flowerType
-              ?.trim() || "",
+            flowerType?.trim() || "",
 
-          occasion:
-            occasions,
+          occasion: occasions,
 
-          /* FLAGS */
+          featured: toBoolean(
+            featured
+          ),
 
-          featured:
-            toBoolean(
-              featured
-            ),
+          bestseller: toBoolean(
+            bestseller
+          ),
 
-          bestseller:
-            toBoolean(
-              bestseller
-            ),
+          newArrival: toBoolean(
+            newArrival,
+            true
+          ),
 
-          newArrival:
-            toBoolean(
-              newArrival,
-              true
-            ),
-
-          isActive:
-            true,
-
-          /* DELIVERY */
+          isActive: true,
 
           deliveryAvailable:
             toBoolean(
@@ -507,15 +468,12 @@ export const createProduct =
               sameDayDelivery
             ),
 
-          /* SEO */
-
           metaTitle:
-            metaTitle
-              ?.trim() || "",
+            metaTitle?.trim() || "",
 
           metaDescription:
-            metaDescription
-              ?.trim() || "",
+            metaDescription?.trim() ||
+            "",
         });
 
       return res.status(201).json({
@@ -530,9 +488,7 @@ export const createProduct =
         error
       );
 
-      if (
-        error.code === 11000
-      ) {
+      if (error.code === 11000) {
         return res.status(409).json({
           success: false,
           message:
@@ -587,13 +543,10 @@ export const getProducts =
         newArrival,
         isActive,
         search,
-
         minPrice,
         maxPrice,
-
         inStock,
         lowStock,
-
         limit = 50,
         page = 1,
       } = req.query;
@@ -628,27 +581,20 @@ export const getProducts =
          FLAGS
       ------------------------------------------------- */
 
-      if (
-        featured === "true"
-      ) {
+      if (featured === "true") {
         filter.featured = true;
       }
 
-      if (
-        bestseller === "true"
-      ) {
+      if (bestseller === "true") {
         filter.bestseller = true;
       }
 
-      if (
-        newArrival === "true"
-      ) {
+      if (newArrival === "true") {
         filter.newArrival = true;
       }
 
       /* -------------------------------------------------
-         PRICE FILTER
-         pricePerKg is still maintained
+         PRICE
       ------------------------------------------------- */
 
       if (
@@ -657,18 +603,26 @@ export const getProducts =
       ) {
         filter.pricePerKg = {};
 
+        const min =
+          Number(minPrice);
+
+        const max =
+          Number(maxPrice);
+
         if (
-          minPrice !== undefined
+          minPrice !== undefined &&
+          Number.isFinite(min)
         ) {
           filter.pricePerKg.$gte =
-            Number(minPrice);
+            min;
         }
 
         if (
-          maxPrice !== undefined
+          maxPrice !== undefined &&
+          Number.isFinite(max)
         ) {
           filter.pricePerKg.$lte =
-            Number(maxPrice);
+            max;
         }
       }
 
@@ -676,20 +630,28 @@ export const getProducts =
          STOCK
       ------------------------------------------------- */
 
-      if (
-        inStock === "true"
-      ) {
+      if (inStock === "true") {
         filter.stockKg = {
           $gt: 0,
         };
       }
 
-      if (
-        lowStock === "true"
-      ) {
-        filter.stockKg = {
-          $gt: 0,
-          $lte: 5,
+      if (lowStock === "true") {
+        filter.$expr = {
+          $and: [
+            {
+              $gt: [
+                "$stockKg",
+                0,
+              ],
+            },
+            {
+              $lte: [
+                "$stockKg",
+                "$lowStockThresholdKg",
+              ],
+            },
+          ],
         };
       }
 
@@ -708,20 +670,18 @@ export const getProducts =
          PAGINATION
       ------------------------------------------------- */
 
-      const pageNumber =
-        Math.max(
-          Number(page) || 1,
-          1
-        );
+      const pageNumber = Math.max(
+        Number(page) || 1,
+        1
+      );
 
-      const limitNumber =
-        Math.min(
-          Math.max(
-            Number(limit) || 50,
-            1
-          ),
-          100
-        );
+      const limitNumber = Math.min(
+        Math.max(
+          Number(limit) || 50,
+          1
+        ),
+        100
+      );
 
       const skip =
         (pageNumber - 1) *
@@ -740,9 +700,7 @@ export const getProducts =
             createdAt: -1,
           })
           .skip(skip)
-          .limit(
-            limitNumber
-          ),
+          .limit(limitNumber),
 
         Product.countDocuments(
           filter
@@ -751,21 +709,12 @@ export const getProducts =
 
       return res.status(200).json({
         success: true,
-
-        count:
-          products.length,
-
+        count: products.length,
         total,
-
-        page:
-          pageNumber,
-
-        pages:
-          Math.ceil(
-            total /
-              limitNumber
-          ),
-
+        page: pageNumber,
+        pages: Math.ceil(
+          total / limitNumber
+        ),
         products,
       });
     } catch (error) {
@@ -789,6 +738,18 @@ export const getProducts =
 export const getProductById =
   async (req, res) => {
     try {
+      if (
+        !mongoose.Types.ObjectId.isValid(
+          req.params.id
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid product ID",
+        });
+      }
+
       const product =
         await Product.findById(
           req.params.id
@@ -827,6 +788,18 @@ export const getProductById =
 export const updateProduct =
   async (req, res) => {
     try {
+      if (
+        !mongoose.Types.ObjectId.isValid(
+          req.params.id
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid product ID",
+        });
+      }
+
       const product =
         await Product.findById(
           req.params.id
@@ -845,11 +818,20 @@ export const updateProduct =
       ------------------------------------------------- */
 
       if (
-        req.body.name !==
-        undefined
+        req.body.name !== undefined
       ) {
-        product.name =
+        const name =
           req.body.name.trim();
+
+        if (!name) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Product name cannot be empty",
+          });
+        }
+
+        product.name = name;
       }
 
       if (
@@ -892,8 +874,7 @@ export const updateProduct =
           req.body
             .subcategory
             ?.trim()
-            .toLowerCase() ||
-          "";
+            .toLowerCase() || "";
       }
 
       /* -------------------------------------------------
@@ -932,9 +913,7 @@ export const updateProduct =
           );
 
         if (
-          !Number.isFinite(
-            stock
-          ) ||
+          !Number.isFinite(stock) ||
           stock < 0
         ) {
           return res.status(400).json({
@@ -944,20 +923,34 @@ export const updateProduct =
           });
         }
 
-        product.stockKg =
-          stock;
+        product.stockKg = stock;
       }
 
       if (
         req.body.lowStockThresholdKg !==
         undefined
       ) {
-        product.lowStockThresholdKg =
-          toNumber(
+        const threshold =
+          Number(
             req.body
-              .lowStockThresholdKg,
-            5
+              .lowStockThresholdKg
           );
+
+        if (
+          !Number.isFinite(
+            threshold
+          ) ||
+          threshold < 0
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Invalid low stock threshold",
+          });
+        }
+
+        product.lowStockThresholdKg =
+          threshold;
       }
 
       /* -------------------------------------------------
@@ -965,8 +958,7 @@ export const updateProduct =
       ------------------------------------------------- */
 
       if (
-        req.body.sku !==
-        undefined
+        req.body.sku !== undefined
       ) {
         const newSKU =
           req.body.sku
@@ -991,11 +983,9 @@ export const updateProduct =
             });
           }
 
-          product.sku =
-            newSKU;
+          product.sku = newSKU;
         } else {
-          product.sku =
-            undefined;
+          product.sku = undefined;
         }
       }
 
@@ -1004,8 +994,7 @@ export const updateProduct =
       ------------------------------------------------- */
 
       if (
-        req.body.size !==
-        undefined
+        req.body.size !== undefined
       ) {
         product.size =
           req.body.size
@@ -1013,8 +1002,7 @@ export const updateProduct =
       }
 
       if (
-        req.body.color !==
-        undefined
+        req.body.color !== undefined
       ) {
         product.color =
           req.body.color
@@ -1134,21 +1122,38 @@ export const updateProduct =
       }
 
       /* -------------------------------------------------
-         IMAGE
+         IMAGES
       ------------------------------------------------- */
 
-      if (req.file) {
-        const newImage =
-          `/uploads/products/${req.file.filename}`;
+      const newMainImage =
+        getFiles(req, "image")[0];
 
-        product.image =
-          newImage;
+      const newAdditionalImages =
+        getFiles(req, "images");
+
+      if (newMainImage) {
+        const newImage =
+          `/uploads/products/${newMainImage.filename}`;
+
+        product.image = newImage;
 
         product.images.push({
           url: newImage,
-          alt:
-            product.name,
+          alt: product.name,
         });
+      }
+
+      if (
+        newAdditionalImages.length > 0
+      ) {
+        newAdditionalImages.forEach(
+          (file) => {
+            product.images.push({
+              url: `/uploads/products/${file.filename}`,
+              alt: product.name,
+            });
+          }
+        );
       }
 
       /* -------------------------------------------------
@@ -1169,9 +1174,7 @@ export const updateProduct =
         error
       );
 
-      if (
-        error.code === 11000
-      ) {
+      if (error.code === 11000) {
         return res.status(409).json({
           success: false,
           message:
@@ -1219,6 +1222,18 @@ export const updateProduct =
 export const deleteProduct =
   async (req, res) => {
     try {
+      if (
+        !mongoose.Types.ObjectId.isValid(
+          req.params.id
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid product ID",
+        });
+      }
+
       const product =
         await Product.findById(
           req.params.id
@@ -1234,8 +1249,7 @@ export const deleteProduct =
 
       /* Soft delete */
 
-      product.isActive =
-        false;
+      product.isActive = false;
 
       await product.save();
 

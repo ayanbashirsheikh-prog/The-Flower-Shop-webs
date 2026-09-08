@@ -1,28 +1,12 @@
 import express from "express";
-import dotenv from "dotenv";
+import mongoose from "mongoose";
 import cors from "cors";
-import helmet from "helmet";
-import morgan from "morgan";
 import cookieParser from "cookie-parser";
+import dotenv from "dotenv";
+import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import path from "path";
 import { fileURLToPath } from "url";
-import mongoose from "mongoose";
-
-// =====================================================
-// DATABASE
-// =====================================================
-
-import connectDB from "./config/db.js";
-
-// =====================================================
-// ROUTES
-// =====================================================
-
-import authRoutes from "./routes/authRoutes.js";
-import productRoutes from "./routes/productRoutes.js";
-import orderRoutes from "./routes/orderRoutes.js";
-import adminRoutes from "./routes/adminRoutes.js";
 
 // =====================================================
 // ENVIRONMENT
@@ -31,25 +15,55 @@ import adminRoutes from "./routes/adminRoutes.js";
 dotenv.config();
 
 // =====================================================
+// ROUTES
+// =====================================================
+
+import authRoutes from "./routes/authRoutes.js";
+import productRoutes from "./routes/productRoutes.js";
+
+// Add these later when their files exist:
+//
+// import userRoutes from "./routes/userRoutes.js";
+// import orderRoutes from "./routes/orderRoutes.js";
+// import categoryRoutes from "./routes/categoryRoutes.js";
+// import reviewRoutes from "./routes/reviewRoutes.js";
+// import couponRoutes from "./routes/couponRoutes.js";
+
+// =====================================================
 // APP
 // =====================================================
 
 const app = express();
 
+// =====================================================
+// PATH SETUP
+// =====================================================
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 5000;
-const NODE_ENV = process.env.NODE_ENV || "development";
-
 // =====================================================
-// DATABASE
+// ENV VARIABLES
 // =====================================================
 
-connectDB();
+const PORT = Number(process.env.PORT) || 5000;
+
+const MONGO_URI =
+  process.env.MONGO_URI ||
+  process.env.MONGODB_URI;
+
+const CLIENT_URL =
+  process.env.CLIENT_URL ||
+  "http://localhost:5173";
 
 // =====================================================
-// SECURITY
+// BASIC SECURITY
+// =====================================================
+
+app.disable("x-powered-by");
+
+// =====================================================
+// HELMET
 // =====================================================
 
 app.use(
@@ -57,8 +71,6 @@ app.use(
     crossOriginResourcePolicy: {
       policy: "cross-origin",
     },
-
-    contentSecurityPolicy: false,
   })
 );
 
@@ -66,32 +78,10 @@ app.use(
 // CORS
 // =====================================================
 
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-];
-
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow curl / Postman / server-to-server
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      console.warn(`🚫 CORS blocked: ${origin}`);
-
-      return callback(
-        new Error("Not allowed by CORS")
-      );
-    },
-
+    origin: CLIENT_URL,
     credentials: true,
-
     methods: [
       "GET",
       "POST",
@@ -100,7 +90,6 @@ app.use(
       "DELETE",
       "OPTIONS",
     ],
-
     allowedHeaders: [
       "Content-Type",
       "Authorization",
@@ -109,15 +98,7 @@ app.use(
 );
 
 // =====================================================
-// LOGGING
-// =====================================================
-
-if (NODE_ENV !== "production") {
-  app.use(morgan("dev"));
-}
-
-// =====================================================
-// BODY PARSERS
+// BODY PARSER
 // =====================================================
 
 app.use(
@@ -146,10 +127,7 @@ app.use(cookieParser());
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
 
-  max:
-    NODE_ENV === "production"
-      ? 300
-      : 2000,
+  max: 300,
 
   standardHeaders: true,
 
@@ -161,6 +139,8 @@ const apiLimiter = rateLimit({
       "Too many requests. Please try again later.",
   },
 });
+
+// Apply rate limit to API
 
 app.use("/api", apiLimiter);
 
@@ -176,388 +156,232 @@ app.use(
 );
 
 // =====================================================
-// API ROUTES
+// HEALTH CHECK
 // =====================================================
 
-// -----------------------------
-// AUTH
-// -----------------------------
+app.get("/api/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "The Flower Shop API is running 🌸",
+    environment:
+      process.env.NODE_ENV || "development",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// =====================================================
+// API ROOT
+// =====================================================
+
+app.get("/api", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to The Flower Shop API 🌸",
+  });
+});
+
+// =====================================================
+// AUTH ROUTES
+// =====================================================
 
 app.use(
   "/api/auth",
   authRoutes
 );
 
-// -----------------------------
-// PRODUCTS
-// -----------------------------
+// =====================================================
+// PRODUCT ROUTES
+// =====================================================
 
 app.use(
   "/api/products",
   productRoutes
 );
 
-// -----------------------------
-// ORDERS
-// -----------------------------
-
-app.use(
-  "/api/orders",
-  orderRoutes
-);
-
-// -----------------------------
-// ADMIN
-// -----------------------------
-
-app.use(
-  "/api/admin",
-  adminRoutes
-);
-
 // =====================================================
-// ROOT
+// FUTURE ROUTES
 // =====================================================
 
-app.get("/", (req, res) => {
-  res.status(200).json({
-    success: true,
+// app.use("/api/users", userRoutes);
 
-    message:
-      "🌸 The Flower Shop API is running...",
+// app.use("/api/orders", orderRoutes);
 
-    environment: NODE_ENV,
+// app.use("/api/categories", categoryRoutes);
 
-    version: "1.0.0",
+// app.use("/api/reviews", reviewRoutes);
 
-    timestamp:
-      new Date().toISOString(),
+// app.use("/api/coupons", couponRoutes);
+
+// =====================================================
+// 404 API HANDLER
+// =====================================================
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "API route not found",
+    path: req.originalUrl,
   });
 });
-
-// =====================================================
-// HEALTH CHECK
-// =====================================================
-
-app.get(
-  "/api/health",
-  (req, res) => {
-    const dbState =
-      mongoose.connection.readyState;
-
-    const database =
-      dbState === 1
-        ? "Connected"
-        : dbState === 2
-        ? "Connecting"
-        : "Disconnected";
-
-    const healthy =
-      dbState === 1;
-
-    return res
-      .status(healthy ? 200 : 503)
-      .json({
-        success: healthy,
-
-        message: healthy
-          ? "API is healthy 🚀"
-          : "Database is not connected",
-
-        database,
-
-        server: "Running",
-
-        environment: NODE_ENV,
-
-        timestamp:
-          new Date().toISOString(),
-      });
-  }
-);
-
-// =====================================================
-// API 404
-// =====================================================
-
-app.use(
-  "/api",
-  (req, res) => {
-    return res.status(404).json({
-      success: false,
-
-      message: "API route not found",
-
-      path: req.originalUrl,
-    });
-  }
-);
-
-// =====================================================
-// GLOBAL 404
-// =====================================================
-
-app.use(
-  (req, res) => {
-    return res.status(404).json({
-      success: false,
-
-      message: "Route not found",
-
-      path: req.originalUrl,
-    });
-  }
-);
 
 // =====================================================
 // GLOBAL ERROR HANDLER
 // =====================================================
 
 app.use(
-  (err, req, res, next) => {
+  (error, req, res, next) => {
     console.error(
-      "\n🔥 SERVER ERROR:"
+      "🔥 GLOBAL SERVER ERROR:",
+      error
     );
 
-    console.error(err);
-
-    // -----------------------------
-    // CORS
-    // -----------------------------
+    // -----------------------------------------------
+    // JSON PARSING ERROR
+    // -----------------------------------------------
 
     if (
-      err.message ===
-      "Not allowed by CORS"
-    ) {
-      return res.status(403).json({
-        success: false,
-
-        message:
-          "CORS policy blocked this request.",
-      });
-    }
-
-    // -----------------------------
-    // JSON ERROR
-    // -----------------------------
-
-    if (
-      err instanceof SyntaxError &&
-      err.status === 400 &&
-      err.type ===
-        "entity.parse.failed"
+      error instanceof SyntaxError &&
+      error.status === 400 &&
+      error.type === "entity.parse.failed"
     ) {
       return res.status(400).json({
         success: false,
-
-        message:
-          "Invalid JSON request body.",
+        message: "Invalid JSON request",
       });
     }
 
-    // -----------------------------
-    // MULTER
-    // -----------------------------
+    // -----------------------------------------------
+    // MULTER FILE ERROR
+    // -----------------------------------------------
 
     if (
-      err.name === "MulterError"
+      error.name === "MulterError"
     ) {
       return res.status(400).json({
         success: false,
-
         message:
-          err.message ||
-          "File upload error.",
+          error.message ||
+          "File upload error",
       });
     }
 
-    // -----------------------------
-    // MONGOOSE VALIDATION
-    // -----------------------------
+    // -----------------------------------------------
+    // DEFAULT ERROR
+    // -----------------------------------------------
 
-    if (
-      err.name ===
-      "ValidationError"
-    ) {
-      const errors = Object.values(
-        err.errors
-      ).map(
-        (error) => error.message
-      );
+    return res.status(
+      error.statusCode || 500
+    ).json({
+      success: false,
 
-      return res.status(400).json({
-        success: false,
+      message:
+        error.message ||
+        "Internal server error",
 
-        message:
-          "Validation failed",
-
-        errors,
-      });
-    }
-
-    // -----------------------------
-    // DUPLICATE KEY
-    // -----------------------------
-
-    if (err.code === 11000) {
-      const field =
-        Object.keys(
-          err.keyPattern || {}
-        )[0] || "field";
-
-      return res.status(409).json({
-        success: false,
-
-        message:
-          `${field} already exists.`,
-      });
-    }
-
-    // -----------------------------
-    // DEFAULT
-    // -----------------------------
-
-    const statusCode =
-      err.statusCode ||
-      err.status ||
-      500;
-
-    return res
-      .status(statusCode)
-      .json({
-        success: false,
-
-        message:
-          NODE_ENV ===
-          "production"
-            ? "Internal Server Error"
-            : err.message ||
-              "Internal Server Error",
-      });
+      error:
+        process.env.NODE_ENV ===
+        "development"
+          ? error.message
+          : undefined,
+    });
   }
 );
 
 // =====================================================
-// START SERVER
+// DATABASE CONNECTION
 // =====================================================
 
-const server = app.listen(
-  PORT,
-  () => {
-    console.log("");
-
-    console.log(
-      "=========================================="
-    );
-
-    console.log(
-      "🌸 THE FLOWER SHOP API"
-    );
-
-    console.log(
-      "=========================================="
-    );
-
-    console.log(
-      `🚀 Server: http://localhost:${PORT}`
-    );
-
-    console.log(
-      `🔐 Auth: http://localhost:${PORT}/api/auth`
-    );
-
-    console.log(
-      `🌹 Products: http://localhost:${PORT}/api/products`
-    );
-
-    console.log(
-      `🛒 Orders: http://localhost:${PORT}/api/orders`
-    );
-
-    console.log(
-      `👑 Admin: http://localhost:${PORT}/api/admin`
-    );
-
-    console.log(
-      `📁 Uploads: http://localhost:${PORT}/uploads`
-    );
-
-    console.log(
-      `❤️ Health: http://localhost:${PORT}/api/health`
-    );
-
-    console.log(
-      `⚙️ Environment: ${NODE_ENV}`
-    );
-
-    console.log(
-      "=========================================="
-    );
-
-    console.log("");
-  }
-);
-
-// =====================================================
-// GRACEFUL SHUTDOWN
-// =====================================================
-
-const shutdown = async (signal) => {
-  console.log(
-    `\n🛑 ${signal} received.`
-  );
-
-  console.log(
-    "Closing server..."
-  );
-
-  server.close(async () => {
-    console.log(
-      "✅ HTTP server closed."
-    );
-
-    try {
-      await mongoose.connection.close();
-
-      console.log(
-        "✅ MongoDB connection closed."
+const connectDatabase = async () => {
+  try {
+    if (!MONGO_URI) {
+      throw new Error(
+        "MONGO_URI is missing from .env"
       );
-
-      process.exit(0);
-    } catch (error) {
-      console.error(
-        "❌ MongoDB shutdown error:",
-        error.message
-      );
-
-      process.exit(1);
     }
-  });
+
+    const connection =
+      await mongoose.connect(
+        MONGO_URI
+      );
+
+    console.log(
+      `✅ MongoDB connected: ${connection.connection.host}`
+    );
+
+    console.log(
+      `📦 Database: ${connection.connection.name}`
+    );
+  } catch (error) {
+    console.error(
+      "❌ MongoDB connection failed:",
+      error.message
+    );
+
+    process.exit(1);
+  }
 };
 
 // =====================================================
-// PROCESS SIGNALS
+// SERVER START
 // =====================================================
 
-process.on(
-  "SIGINT",
-  () => shutdown("SIGINT")
-);
+const startServer = async () => {
+  try {
+    await connectDatabase();
 
-process.on(
-  "SIGTERM",
-  () => shutdown("SIGTERM")
-);
+    app.listen(
+      PORT,
+      () => {
+        console.log("");
+        console.log(
+          "🌸 ======================================="
+        );
+        console.log(
+          "🌸      THE FLOWER SHOP API"
+        );
+        console.log(
+          "🌸 ======================================="
+        );
+        console.log(
+          `🚀 Server: http://localhost:${PORT}`
+        );
+        console.log(
+          `💚 Health: http://localhost:${PORT}/api/health`
+        );
+        console.log(
+          `🌷 Products: http://localhost:${PORT}/api/products`
+        );
+        console.log(
+          `🔐 Auth: http://localhost:${PORT}/api/auth`
+        );
+        console.log(
+          `📁 Uploads: http://localhost:${PORT}/uploads`
+        );
+        console.log(
+          "🌸 ======================================="
+        );
+        console.log("");
+      }
+    );
+  } catch (error) {
+    console.error(
+      "❌ Server startup failed:",
+      error.message
+    );
+
+    process.exit(1);
+  }
+};
 
 // =====================================================
-// UNHANDLED ERRORS
+// PROCESS ERROR HANDLING
 // =====================================================
 
 process.on(
   "unhandledRejection",
   (error) => {
     console.error(
-      "🔥 Unhandled Promise Rejection:",
+      "❌ Unhandled Promise Rejection:",
       error
     );
   }
@@ -567,10 +391,16 @@ process.on(
   "uncaughtException",
   (error) => {
     console.error(
-      "🔥 Uncaught Exception:",
+      "❌ Uncaught Exception:",
       error
     );
 
     process.exit(1);
   }
 );
+
+// =====================================================
+// START
+// =====================================================
+
+startServer();

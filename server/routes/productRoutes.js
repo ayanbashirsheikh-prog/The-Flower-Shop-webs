@@ -15,72 +15,83 @@ import upload from "../middleware/upload.js";
 
 const router = express.Router();
 
-/**
- * =========================================================
- * PUBLIC PRODUCT ROUTES
- * =========================================================
- */
+/* =====================================================
+   PUBLIC PRODUCT ROUTES
+===================================================== */
 
-/**
- * GET /api/products
- *
- * Get all products
- */
-router.get("/", getProducts);
+/*
+  GET /api/products
+*/
 
-/**
- * GET /api/products/:id
- *
- * Get single product
- */
-router.get("/:id", getProductById);
+router.get(
+  "/",
+  getProducts
+);
 
-/**
- * =========================================================
- * ADMIN PRODUCT ROUTES
- * =========================================================
- */
+/*
+  GET /api/products/:id
+*/
 
-/**
- * POST /api/products
- *
- * Create product
- *
- * Authentication:
- * protect
- *
- * Authorization:
- * adminOnly
- *
- * Upload:
- * image
- */
+router.get(
+  "/:id",
+  getProductById
+);
+
+/* =====================================================
+   ADMIN PRODUCT ROUTES
+===================================================== */
+
+/*
+  POST /api/products
+
+  FormData:
+
+  image   -> main image
+  images  -> additional images
+*/
+
 router.post(
   "/",
   protect,
   adminOnly,
-  upload.single("image"),
+  upload.fields([
+    {
+      name: "image",
+      maxCount: 1,
+    },
+    {
+      name: "images",
+      maxCount: 9,
+    },
+  ]),
   createProduct
 );
 
-/**
- * PUT /api/products/:id
- *
- * Update product
- */
+/*
+  PUT /api/products/:id
+*/
+
 router.put(
   "/:id",
   protect,
   adminOnly,
-  upload.single("image"),
+  upload.fields([
+    {
+      name: "image",
+      maxCount: 1,
+    },
+    {
+      name: "images",
+      maxCount: 9,
+    },
+  ]),
   updateProduct
 );
 
-/**
- * DELETE /api/products/:id
- *
- * Delete product
- */
+/*
+  DELETE /api/products/:id
+*/
+
 router.delete(
   "/:id",
   protect,

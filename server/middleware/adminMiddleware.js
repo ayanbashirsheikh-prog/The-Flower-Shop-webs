@@ -4,29 +4,33 @@
  * =====================================================
  */
 
-export const adminOnly = (
-  req,
-  res,
-  next
-) => {
+export const adminOnly = (req, res, next) => {
   try {
+    // =====================================================
+    // USER CHECK
+    // =====================================================
+
     if (!req.user) {
       return res.status(401).json({
         success: false,
-        message:
-          "Authentication required",
+        message: "Authentication required",
       });
     }
 
-    if (
-      req.user.role !== "admin"
-    ) {
+    // =====================================================
+    // ADMIN CHECK
+    // =====================================================
+
+    if (req.user.role !== "admin") {
       return res.status(403).json({
         success: false,
-        message:
-          "Admin access required",
+        message: "Admin access required",
       });
     }
+
+    // =====================================================
+    // ALLOWED
+    // =====================================================
 
     next();
   } catch (error) {
@@ -37,8 +41,7 @@ export const adminOnly = (
 
     return res.status(403).json({
       success: false,
-      message:
-        "Access denied",
+      message: "Access denied",
     });
   }
 };

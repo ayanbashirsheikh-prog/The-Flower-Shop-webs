@@ -1,11 +1,16 @@
 import jwt from "jsonwebtoken";
+import User from "../models/User.js";
 
-export const protect = (req, res, next) => {
+export const protect = async (
+  req,
+  res,
+  next
+) => {
   try {
     let token = null;
 
     // =================================================
-    // COOKIE TOKEN
+    // 1. HTTP-ONLY COOKIE
     // =================================================
 
     if (req.cookies?.token) {
@@ -13,7 +18,7 @@ export const protect = (req, res, next) => {
     }
 
     // =================================================
-    // BEARER TOKEN
+    // 2. OPTIONAL BEARER TOKEN
     // =================================================
 
     if (
@@ -29,7 +34,7 @@ export const protect = (req, res, next) => {
     }
 
     // =================================================
-    // TOKEN REQUIRED
+    // 3. TOKEN REQUIRED
     // =================================================
 
     if (!token) {
@@ -41,12 +46,12 @@ export const protect = (req, res, next) => {
     }
 
     // =================================================
-    // JWT SECRET CHECK
+    // 4. JWT SECRET
     // =================================================
 
     if (!process.env.JWT_SECRET) {
       console.error(
-        "❌ JWT_SECRET missing from .env"
+        "JWT_SECRET missing from .env"
       );
 
       return res.status(500).json({
@@ -57,24 +62,70 @@ export const protect = (req, res, next) => {
     }
 
     // =================================================
-    // VERIFY TOKEN
+    // 5. VERIFY TOKEN
     // =================================================
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
+    const decoded =
+      jwt.verify(
+        token,
+        process.env.JWT_SECRET
+      );
 
     // =================================================
-    // ATTACH USER
+    // 6. USER ID
     // =================================================
 
-    req.user = decoded;
+    if (!decoded?.id) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Invalid authentication token",
+      });
+    }
+
+    // =================================================
+    // 7. FIND USER
+    // =================================================
+
+    const user =
+      await User.findById(
+        decoded.id
+      );
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "User account no longer exists",
+      });
+    }
+
+    // =================================================
+    // 8. ACTIVE CHECK
+    // =================================================
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Your account has been deactivated",
+      });
+    }
+
+    // =================================================
+    // 9. ATTACH USER
+    // =================================================
+
+    req.user = user;
+
+    // =================================================
+    // 10. CONTINUE
+    // =================================================
 
     next();
   } catch (error) {
     console.error(
-      "🔐 Authentication error:",
+      "AUTHENTICATION ERROR:",
       error.message
     );
 
@@ -89,10 +140,21 @@ export const protect = (req, res, next) => {
       });
     }
 
+    if (
+      error.name ===
+      "JsonWebTokenError"
+    ) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Invalid authentication token",
+      });
+    }
+
     return res.status(401).json({
       success: false,
       message:
-        "Invalid authentication token",
+        "Authentication failed",
     });
   }
 };
